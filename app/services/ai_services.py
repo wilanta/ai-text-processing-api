@@ -1,10 +1,13 @@
 import os
 import json
 
-import httpx
 from dotenv import load_dotenv
 
 from app.schemas import ClassificationResult, ExtractionResult
+
+from app.providers.ollama import OllamaProvider
+
+provider = OllamaProvider()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,52 +16,10 @@ load_dotenv()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
 
-
-def generate_structured(prompt: str, schema: dict) -> dict:
-    """Send a prompt to Ollama with structured JSON format according to the schema.
-
-    Args:
-        prompt: Text instruction for the AI model.
-        schema: JSON schema definition (from Pydantic model_json_schema()).
-
-    Returns:
-        Dictionary containing the JSON response from Ollama.
-    """
-    response = httpx.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json={
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": schema,
-        },
-        timeout=120.0,
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data
+AI_TIMEOUT = float(os.getenv("AI_TIMEOUT", "12O"))
 
 
-def generate(prompt: str) -> str:
-    """Send a prompt to Ollama and retrieve the raw text response.
-
-    Args:
-        prompt: Text instruction for the AI model.
-
-    Returns:
-        Generated text from the model.
-    """
-    response = httpx.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-        timeout=120.0,
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data["response"]
-
-
-def summarize_text(text: str) -> str:
+async def summarize_text(text: str) -> str:
     """Summarize text into a concise version while preserving important information.
 
     Args:
@@ -79,7 +40,7 @@ Text:
 
 Summary:
     """
-    return generate(prompt)
+    return await provider.generate(prompt)
 
 
 def classify_text(text: str) -> ClassificationResult:
@@ -113,7 +74,7 @@ Return only data matching the requested schema.
 Text:
 {text}
     """
-    result = generate_structured(
+    result = provider.generate_structured(
         prompt,
         ClassificationResult.model_json_schema(),
     )
@@ -121,7 +82,7 @@ Text:
     return ClassificationResult.model_validate(parsed)
 
 
-def extract_entities(text: str) -> ExtractionResult:
+async def extract_entities(text: str) -> ExtractionResult:
     """Extract named entities (person names, organizations, locations, etc.) from text.
 
     Args:
@@ -146,15 +107,15 @@ Do not invent entities.
 Text:
 {text}
 """
-    result = generate_structured(
+    result = provider.generate_structured(
         prompt,
         ExtractionResult.model_json_schema(),
     )
     parsed = json.loads(result["response"])
-    return ExtractionResult.model_validate(parsed)
+    return await ExtractionResult.model_validate(parsed)
 
 
-def rewrite_text(text: str, tone: str) -> str:
+async def rewrite_text(text: str, tone: str) -> str:
     """Rewrite text in the requested tone without changing the original meaning.
 
     Args:
@@ -177,10 +138,10 @@ Text:
 
 Rewritten text:
 """
-    return generate(prompt)
+    return await provider.generate(prompt)
 
 
-def translate_text(text: str, target_language: str) -> str:
+async def translate_text(text: str, target_language: str) -> str:
     """Translate text to the target language while preserving meaning and tone.
 
     Args:
@@ -203,4 +164,4 @@ Text:
 
 Translation:
 """
-    return generate(prompt)
+    return await provider.generate(prompt)

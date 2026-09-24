@@ -1,7 +1,8 @@
 """Application entry point for the AI text processing API."""
 
 # pylint: disable=import-error
-from fastapi import FastAPI  # pyright: ignore[reportMissingImports]
+from fastapi import FastAPI, Request  # pyright: ignore[reportMissingImports]
+from fastapi.responses import JSONResponse
 
 from app.schemas import TextRequest, RewriteRequest, TranslateRequest
 from app.services.ai_services import (
@@ -11,6 +12,11 @@ from app.services.ai_services import (
     rewrite_text,
     translate_text,
 )
+from app.exceptions import (
+    AIConnectionError,
+    AITimeoutError,
+    AIResponseError,
+)
 
 # Initialize the FastAPI application with documentation metadata
 app = FastAPI(
@@ -18,6 +24,48 @@ app = FastAPI(
     description="AI-powered text processing API",
     version="10.0.0",
 )
+
+
+@app.exception_handler(AIConnectionError)
+async def ai_connection_handler(
+    request: Request,
+    exc: AIConnectionError,
+):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "ai_service_unavailable",
+            "detail": str(exc),
+        },
+    )
+
+
+@app.exception_handler(AITimeoutError)
+async def ai_timeout_handler(
+    request: Request,
+    exc: AITimeoutError,
+):
+    return JSONResponse(
+        status_code=504,
+        content={
+            "error": "ai_timeout",
+            "detail": str(exc),
+        },
+    )
+
+
+@app.exception_handler(AIResponseError)
+async def ai_response_handler(
+    request: Request,
+    exc: AIResponseError,
+):
+    return JSONResponse(
+        status_code=502,
+        content={
+            "error": "invalid_ai_response",
+            "detail": str(exc),
+        },
+    )
 
 
 # Root endpoint — basic application info
@@ -34,32 +82,32 @@ def health():
 
 # Summarize text using AI model
 @app.post("/summarize")
-def summarize(request: TextRequest):
-    summary = summarize_text(request.text)
+async def summarize(request: TextRequest):
+    summary = await summarize_text(request.text)
     return {"summary": summary}
 
 
 # Classify text: category + sentiment
 @app.post("/classify")
-def classify(request: TextRequest):
-    return classify_text(request.text)
+async def classify(request: TextRequest):
+    return await classify_text(request.text)
 
 
 # Extract named entities from text
 @app.post("/extract")
-def extract(request: TextRequest):
-    return extract_entities(request.text)
+async def extract(request: TextRequest):
+    return await extract_entities(request.text)
 
 
 # Rewrite text in the requested tone
 @app.post("/rewrite")
-def rewrite(request: RewriteRequest):
-    result = rewrite_text(request.text, request.tone)
+async def rewrite(request: RewriteRequest):
+    result = await rewrite_text(request.text, request.tone)
     return {"rewritten_text": result}
 
 
 # Translate text to target language
 @app.post("/translate")
-def translate(request: TranslateRequest):
-    result = translate_text(request.text, request.target_language)
+async def translate(request: TranslateRequest):
+    result = await translate_text(request.text, request.target_language)
     return {"translation": result, "target_language": request.target_language}
