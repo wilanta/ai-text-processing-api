@@ -1,4 +1,9 @@
-"""Application entry point for the AI text processing API."""
+"""Application entry point for the AI text processing API.
+
+Exposes a REST interface over FastAPI. Each route maps one-to-one to a function
+in app.services.ai_services; this file handles only request binding, response
+formatting, and global exception translation.
+"""
 
 # pylint: disable=import-error
 from fastapi import FastAPI, Request  # pyright: ignore[reportMissingImports]
@@ -18,7 +23,8 @@ from app.exceptions import (
     AIResponseError,
 )
 
-# Initialize the FastAPI application with documentation metadata
+# Initialize the FastAPI application with documentation metadata.
+# The version field is incremented on each breaking API change.
 app = FastAPI(
     title="AI Proccesing API",
     description="AI-powered text processing API",
@@ -26,6 +32,8 @@ app = FastAPI(
 )
 
 
+# Register exception handlers so that AI-service failures return structured
+# JSON with the correct HTTP status instead of leaking internal tracebacks.
 @app.exception_handler(AIConnectionError)
 async def ai_connection_handler(
     request: Request,

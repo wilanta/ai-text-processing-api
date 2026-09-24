@@ -7,12 +7,18 @@ from app.schemas import ClassificationResult, ExtractionResult
 
 from app.providers.ollama import OllamaProvider
 
+# Module-level singleton — all endpoints share one provider instance.
+# This avoids re-reading env vars and re-creating the httpx client configuration
+# on every request.
 provider = OllamaProvider()
 
-# Load environment variables from .env file
+# Load environment variables from .env file so local overrides take precedence
+# over system/environment variables.
 load_dotenv()
 
-# Ollama connection configuration (local AI model)
+# Ollama connection configuration (local AI model).
+# These constants are kept for backward compatibility; the provider reads them
+# from env internally, but they are exposed here for documentation purposes.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
 
@@ -21,6 +27,10 @@ AI_TIMEOUT = float(os.getenv("AI_TIMEOUT", "120"))
 
 async def summarize_text(text: str) -> str:
     """Summarize text into a concise version while preserving important information.
+
+    Builds a prompt that instructs the model to retain facts and avoid hallucination,
+    then delegates to the unstructured Ollama generate() path since the summary is
+    free-form prose, not structured JSON.
 
     Args:
         text: Source text to be summarized.
@@ -43,8 +53,13 @@ Summary:
     return await provider.generate(prompt)
 
 
-def classify_text(text: str) -> ClassificationResult:
+async def classify_text(text: str) -> ClassificationResult:
     """Classify text into a category and sentiment.
+
+    Uses the structured generation path so the model returns JSON matching the
+    ClassificationResult Pydantic schema. The raw JSON string is parsed and then
+    validated — this catches cases where the model returns extra fields or
+    misspelled labels that would otherwise slip through.
 
     Args:
         text: Text to be classified.
@@ -74,16 +89,23 @@ Return only data matching the requested schema.
 Text:
 {text}
     """
+    # generate_structured is async — await it to get the raw response dict.
     result = provider.generate_structured(
         prompt,
         ClassificationResult.model_json_schema(),
     )
+    # Parse the JSON string embedded in Ollama's response envelope.
     parsed = json.loads(result["response"])
+    # Re-validate through Pydantic to enforce literal constraints.
     return ClassificationResult.model_validate(parsed)
 
 
 async def extract_entities(text: str) -> ExtractionResult:
     """Extract named entities (person names, organizations, locations, etc.) from text.
+
+    Like classify_text, this uses structured generation. The prompt enumerates
+    the entity types the model should look for so it doesn't return arbitrary
+    noun phrases that aren't named entities.
 
     Args:
         text: Source text for entity extraction.
