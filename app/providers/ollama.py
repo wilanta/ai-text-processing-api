@@ -71,7 +71,7 @@ class OllamaProvider(AIProvider):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await httpx.post(
+                response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
                         "model": self.model,
@@ -144,7 +144,7 @@ class OllamaProvider(AIProvider):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await httpx.post(
+                response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={"model": self.model, "prompt": prompt, "stream": False},
                     timeout=self.timeout,

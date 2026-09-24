@@ -16,7 +16,7 @@ load_dotenv()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
 
-AI_TIMEOUT = float(os.getenv("AI_TIMEOUT", "12O"))
+AI_TIMEOUT = float(os.getenv("AI_TIMEOUT", "120"))
 
 
 async def summarize_text(text: str) -> str:
